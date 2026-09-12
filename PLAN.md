@@ -159,7 +159,12 @@ Suggested build order:
 - [x] `backend/app/agent.py` — `CookingAgent` with tool-calling (propose_recipe, save_recipe, search_recipes, list_recipes); same-turn save is rejected in code, not just prompt wording.
 - [x] `backend/tests/test_agent.py` — approval-gate tests via a fake Anthropic client (3/3 passing, no API key needed).
 - [x] `backend/scripts/chat_cli.py` — manual CLI to talk to the agent (needs a real `ANTHROPIC_API_KEY` to actually exercise, not yet run against the live API).
-- [ ] Remaining build-order steps 3-7 (ingest.py + Postgres, FastAPI app, Discord bot, Docker Compose, auth) — not started.
+- [x] `backend/app/db.py` — SQLAlchemy `UserRecord`/`RecipeRecord` tables (JSON columns for tags/ingredients/steps/ai_filled; `vault_path` nullable for future non-owner users).
+- [x] `backend/app/ingest.py` — `ingest_file`/`ingest_vault`, upserts by `(owner_id, title)`.
+- [x] `save_recipe` in `agent.py` now also ingests into the DB when `db_session`/`owner_id` are configured.
+- [x] `backend/tests/test_ingest.py` + updated `test_agent.py` — 9/9 tests passing (SQLite-backed for speed).
+- [x] Verified end-to-end against a **real Postgres** (temporary Docker container, since Docker Desktop wasn't running - started it, tested, tore the container down after).
+- [ ] Remaining build-order steps 4-7 (FastAPI chat app, Discord bot, Docker Compose + Cloudflare Tunnel, auth) — not started.
 
 ## Verification
 
