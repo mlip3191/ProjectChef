@@ -55,10 +55,13 @@ class RecipeRecord(Base):
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
 
     servings: Mapped[int | None] = mapped_column(nullable=True)
-    prep_time: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    cook_time: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    total_time: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    difficulty: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Free-text time/difficulty descriptions (e.g. "40 minutes (oven) or
+    # 3-8 hours (crockpot)") run well past a short code, so these are sized
+    # generously rather than assuming a terse "20m"-style value.
+    prep_time: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cook_time: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    total_time: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    difficulty: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     source: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created: Mapped[date | None] = mapped_column(Date, nullable=True)
