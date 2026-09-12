@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>ProjectChef</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+  #log { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; height: 420px;
+         overflow-y: auto; margin-bottom: 1rem; white-space: pre-wrap; }
+  .msg-you { color: #333; margin: 0.5rem 0; }
+  .msg-chef { color: #0a6b3a; margin: 0.5rem 0; }
+  .msg-system { color: #999; font-style: italic; margin: 0.5rem 0; }
+  form { display: flex; gap: 0.5rem; }
+  input { flex: 1; padding: 0.5rem; font-size: 1rem; }
+  button { padding: 0.5rem 1rem; font-size: 1rem; }
+</style>
+</head>
+<body>
+  <h1>ProjectChef</h1>
+  <div id="log"></div>
+  <form id="form">
+    <input id="input" autocomplete="off" placeholder="Tell me about a recipe..." />
+    <button type="submit">Send</button>
+  </form>
+
+  <script>
+    const log = document.getElementById('log');
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    function append(cls, text) {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    ws.onopen = () => append('msg-system', 'connected');
+    ws.onmessage = (event) => append('msg-chef', 'chef: ' + event.data);
+    ws.onclose = () => append('msg-system', 'disconnected');
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      append('msg-you', 'you: ' + text);
+      ws.send(text);
+      input.value = '';
+    });
+  </script>
+</body>
+</html>
