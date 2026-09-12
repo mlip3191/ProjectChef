@@ -21,7 +21,9 @@ import json
 from pathlib import Path
 
 import anthropic
+from sqlalchemy.orm import Session
 
+from .ingest import ingest_file
 from .models import Recipe
 from .vault import recipe_to_markdown
 
@@ -103,11 +105,22 @@ TOOLS = [
 
 
 class CookingAgent:
-    def __init__(self, vault_dir: Path | str, client: anthropic.Anthropic | None = None):
+    def __init__(
+        self,
+        vault_dir: Path | str,
+        client: anthropic.Anthropic | None = None,
+        db_session: Session | None = None,
+        owner_id: int | None = None,
+    ):
         self.vault_dir = Path(vault_dir)
         (self.vault_dir / "Recipes").mkdir(parents=True, exist_ok=True)
         self.client = client or anthropic.Anthropic()
         self.history: list[dict] = []
+
+        # Both must be set for save_recipe to also ingest into the DB index.
+        # Left unset, the agent still works vault-only (e.g. in tests).
+        self.db_session = db_session
+        self.owner_id = owner_id
 
         self._pending: Recipe | None = None
         self._pending_turn: int = -1
@@ -178,6 +191,11 @@ class CookingAgent:
         path.write_text(recipe_to_markdown(recipe))
         self._pending = None
         self._pending_turn = -1
+
+        if self.db_session is not None and self.owner_id is not None:
+            ingest_file(path, self.db_session, self.owner_id)
+            self.db_session.commit()
+
         return {"status": "saved", "path": str(path)}
 
     def _search_recipes(self, query: str) -> dict:

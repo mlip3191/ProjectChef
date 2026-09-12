@@ -12,7 +12,11 @@ from typing import Any
 
 import pytest
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from app.agent import CookingAgent
+from app.db import Base, UserRecord, RecipeRecord
 
 SAMPLE_RECIPE_INPUT = {
     "title": "Test Soup",
@@ -90,6 +94,31 @@ def test_save_after_later_turn_succeeds(tmp_path):
     assert reply == "Saved!"
     assert agent._pending is None
     assert (tmp_path / "Recipes" / "Test Soup.md").exists()
+
+
+def test_save_ingests_into_db_when_configured(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path}/test.db")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    user = UserRecord(username="mike", password_hash="x")
+    session.add(user)
+    session.flush()
+
+    client = FakeClient(
+        [
+            _tool_use("propose_recipe", SAMPLE_RECIPE_INPUT),
+            _text("Does this look right?"),
+            _tool_use("save_recipe", {}, tool_id="t2"),
+            _text("Saved!"),
+        ]
+    )
+    agent = CookingAgent(vault_dir=tmp_path, client=client, db_session=session, owner_id=user.id)
+
+    agent.send("Here's my soup recipe...")
+    agent.send("Looks good, save it.")
+
+    record = session.query(RecipeRecord).filter_by(owner_id=user.id, title="Test Soup").one()
+    assert record.vault_path == str(tmp_path / "Recipes" / "Test Soup.md")
 
 
 def test_list_and_search_recipes(tmp_path):
