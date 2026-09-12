@@ -168,7 +168,12 @@ Suggested build order:
 - [x] `backend/app/static/index.html` — plain HTML/JS chat page (no React/Vite build step for now; swapping to React later only touches this static frontend, not the backend).
 - [x] `backend/tests/test_main.py` — 4 tests (health, websocket round-trip via a stub agent, default-user bootstrap idempotency, static page served). 13/13 tests passing overall.
 - [x] Verified live: booted the real server against a real Postgres container, confirmed `/health`, the chat page, and a raw WebSocket handshake all work. Full agent chat still needs a real `ANTHROPIC_API_KEY` to exercise (not yet tried against the live Anthropic API).
-- [ ] Remaining build-order steps 5-7 (Discord bot, Docker Compose + Cloudflare Tunnel, auth) — not started.
+- [x] Editor panel added to the web chat UI (view/edit a proposed recipe's markdown before committing; "Commit to Archive" saves the edited version directly, independent of the chat approval flow).
+- [x] Saving a duplicate title appends " (2)", " (3)", etc. instead of overwriting.
+- [x] Archive browser added to the web UI (`GET /api/recipes`, `GET /api/recipes/{title}`): lists and previews everything saved.
+- [x] **Vault moved to its own git repo**: `~/ProjectChef-Vault` (was `~/ProjectChef/backend/vault_dev`, gitignored/untracked), pushed to a new **private** GitHub repo `github.com/mlip3191/ProjectChef-Vault`. `VAULT_DIR` in `backend/.env` updated accordingly; verified the app still serves all 20 recipes from the new location and new saves land there untracked (ready to commit/push).
+- [ ] Discord bot — deprioritized per user (2026-09-11): user is instead building their own separate web app that reads recipes from the vault's `.md` files directly (via the new `ProjectChef-Vault` GitHub repo). Revisit if they want it later.
+- [ ] Remaining build-order steps (Docker Compose + Cloudflare Tunnel, auth) — not started. Auto-committing/pushing every new vault save (rather than manual) is a natural follow-up now that the vault repo exists.
 
 ## Verification
 
