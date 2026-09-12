@@ -173,7 +173,8 @@ Suggested build order:
 - [x] Archive browser added to the web UI (`GET /api/recipes`, `GET /api/recipes/{title}`): lists and previews everything saved.
 - [x] **Vault moved to its own git repo**: `~/ProjectChef-Vault` (was `~/ProjectChef/backend/vault_dev`, gitignored/untracked), pushed to a new **private** GitHub repo `github.com/mlip3191/ProjectChef-Vault`. `VAULT_DIR` in `backend/.env` updated accordingly; verified the app still serves all 20 recipes from the new location and new saves land there untracked (ready to commit/push).
 - [ ] Discord bot — deprioritized per user (2026-09-11): user is instead building their own separate web app that reads recipes from the vault's `.md` files directly (via the new `ProjectChef-Vault` GitHub repo). Revisit if they want it later.
-- [ ] Remaining build-order steps (Docker Compose + Cloudflare Tunnel, auth) — not started. Auto-committing/pushing every new vault save (rather than manual) is a natural follow-up now that the vault repo exists.
+- [x] Every save now auto-commits and pushes to the vault's GitHub remote (`ProjectChef-Vault`), fail-soft (a git/network hiccup never undoes the vault file + DB save). Verified live: a real save reached GitHub, confirmed via `gh api`, then cleaned up.
+- [ ] Remaining build-order steps (Docker Compose + Cloudflare Tunnel, auth) — not started.
 
 ## Verification
 
