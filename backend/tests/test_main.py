@@ -40,7 +40,7 @@ class StubAgent:
 
     def save_edited(self, markdown_text: str) -> dict:
         self.saved_markdown = markdown_text
-        return {"status": "saved", "path": "/fake/vault/Recipes/Test Soup.md"}
+        return {"status": "saved", "path": "/fake/vault/Recipes/Test Soup.md", "title": "Test Soup"}
 
 
 def test_health_endpoint(tmp_path, monkeypatch):
@@ -86,7 +86,11 @@ def test_websocket_save_edited(tmp_path, monkeypatch):
             edited = "---\ntitle: Test Soup\n---\n\n## Steps\n1. Simmer longer.\n"
             ws.send_json({"type": "save_edited", "markdown": edited})
             reply = ws.receive_json()
-            assert reply == {"type": "saved", "path": "/fake/vault/Recipes/Test Soup.md"}
+            assert reply == {
+                "type": "saved",
+                "path": "/fake/vault/Recipes/Test Soup.md",
+                "title": "Test Soup",
+            }
             assert stub.saved_markdown == edited
 
 

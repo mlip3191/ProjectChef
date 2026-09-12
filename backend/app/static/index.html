@@ -100,7 +100,7 @@
         append('msg-chef', 'chef: ' + msg.text);
         setProposal(msg.proposal_markdown);
       } else if (msg.type === 'saved') {
-        editorStatus.textContent = `Saved to ${msg.path}`;
+        editorStatus.textContent = `Saved as "${msg.title}" -> ${msg.path}`;
         setProposal(null);
       } else if (msg.type === 'error') {
         editorStatus.textContent = 'Error: ' + msg.message;

@@ -211,14 +211,32 @@ class CookingAgent:
         return result
 
     def _write_and_ingest(self, recipe: Recipe) -> dict:
-        path = self.vault_dir / "Recipes" / f"{recipe.title}.md"
+        title, path = self._unique_title_and_path(recipe.title)
+        if title != recipe.title:
+            recipe = recipe.model_copy(update={"title": title})
+
         path.write_text(recipe_to_markdown(recipe))
 
         if self.db_session is not None and self.owner_id is not None:
             ingest_file(path, self.db_session, self.owner_id)
             self.db_session.commit()
 
-        return {"status": "saved", "path": str(path)}
+        return {"status": "saved", "path": str(path), "title": recipe.title}
+
+    def _unique_title_and_path(self, title: str) -> tuple[str, Path]:
+        """If <title>.md already exists, append " (2)", " (3)", etc.
+
+        Saving never overwrites an existing recipe file with the same
+        title - each save attempt for a title that's already taken lands
+        as its own new file instead.
+        """
+        recipes_dir = self.vault_dir / "Recipes"
+        candidate = title
+        n = 2
+        while (recipes_dir / f"{candidate}.md").exists():
+            candidate = f"{title} ({n})"
+            n += 1
+        return candidate, recipes_dir / f"{candidate}.md"
 
     def _search_recipes(self, query: str) -> dict:
         query = query.lower()

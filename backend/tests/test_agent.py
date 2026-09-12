@@ -162,6 +162,32 @@ def test_save_edited_works_without_a_prior_proposal(tmp_path):
     assert (tmp_path / "Recipes" / "Manual Entry.md").exists()
 
 
+def test_saving_duplicate_title_appends_sequential_number(tmp_path):
+    client = FakeClient([])
+    agent = CookingAgent(vault_dir=tmp_path, client=client)
+
+    first = recipe_to_markdown(Recipe(title="Chili", ingredients=["x"], steps=["y"]))
+    second = recipe_to_markdown(Recipe(title="Chili", ingredients=["different beans"], steps=["z"]))
+    third = recipe_to_markdown(Recipe(title="Chili", ingredients=["yet another version"], steps=["w"]))
+
+    result1 = agent.save_edited(first)
+    result2 = agent.save_edited(second)
+    result3 = agent.save_edited(third)
+
+    assert result1["title"] == "Chili"
+    assert result2["title"] == "Chili (2)"
+    assert result3["title"] == "Chili (3)"
+
+    recipes_dir = tmp_path / "Recipes"
+    assert (recipes_dir / "Chili.md").exists()
+    assert (recipes_dir / "Chili (2).md").exists()
+    assert (recipes_dir / "Chili (3).md").exists()
+    assert "different beans" in (recipes_dir / "Chili (2).md").read_text()
+
+    # Original file untouched by the later saves.
+    assert "x" in (recipes_dir / "Chili.md").read_text()
+
+
 def test_list_and_search_recipes(tmp_path):
     (tmp_path / "Recipes").mkdir(parents=True)
     (tmp_path / "Recipes" / "Test Soup.md").write_text("onion broth")
