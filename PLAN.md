@@ -51,6 +51,66 @@ Through clarifying questions, the following decisions were made:
 - Non-root users in Dockerfiles; Postgres not exposed outside the Docker network; secrets via `.env`/Docker secrets, never logged, never sent to the frontend (all Claude calls happen server-side only).
 - Nightly Postgres dump to a local backups folder on the box — the DB is rebuildable from the vault anyway, but a dump avoids re-ingesting everything after a crash.
 
+## Vault Schema & Tag Taxonomy
+
+**Directory layout inside the vault repo:**
+```
+Recipes/
+  Chicken Tikka Masala.md
+  Weeknight Fried Rice.md
+  ...
+Templates/
+  Recipe Template.md        # Obsidian core Templates / Templater snippet for new recipes
+Tags.md                     # human-readable doc listing the tag taxonomy below
+```
+
+**Frontmatter schema (one file per recipe):**
+```yaml
+---
+title: Chicken Tikka Masala
+type: recipe
+tags:
+  - cuisine/indian
+  - meal/dinner
+  - diet/gluten-free
+  - method/stovetop
+servings: 4
+prep_time: 20m
+cook_time: 35m
+total_time: 55m
+difficulty: medium
+source: "family recipe, transcribed 2026-09-11"
+created: 2026-09-11
+ai_filled: [cook_time, difficulty]
+ingredients:
+  - 500g chicken thigh, cubed
+  - 200g plain yogurt
+  - 2 tbsp garam masala
+  - 400g crushed tomatoes
+  - ...
+---
+
+## Steps
+1. Marinate chicken in yogurt + spices, 2+ hours (overnight is better).
+2. Sear chicken in batches, set aside.
+3. Build sauce: onion, garlic, ginger, tomatoes, simmer 15 min.
+4. Return chicken to sauce, simmer 10 min, finish with cream.
+
+## Notes
+Freezes well. Great with basmati rice or naan.
+```
+
+**Why hierarchical tags (`cuisine/indian`, not just `indian`):** Obsidian natively understands `/` in tags as nesting, so your tag pane shows a collapsible tree (`cuisine` → `indian`, `italian`, `mexican`, ...) instead of one flat alphabetical soup. It also means a Dataview/search query can match an entire branch (`tag:#cuisine`) or one leaf (`tag:#cuisine/indian`).
+
+**Starter tag taxonomy** (documented in `Tags.md`, extend freely over time):
+- `cuisine/…` — indian, italian, mexican, american, thai, ...
+- `meal/…` — breakfast, lunch, dinner, dessert, snack
+- `diet/…` — vegetarian, vegan, gluten-free, dairy-free
+- `method/…` — stovetop, oven, grill, slow-cooker, no-cook
+- `season/…` — summer, winter, holiday
+
+**How this maps to code:** the `ingredients`/`tags`/times fields above are exactly the fields on the `Recipe` Pydantic model in `models.py`; `vault.py` is what serializes/parses this exact YAML+markdown shape. Claude's `propose_recipe` tool call fills in any of these fields it can reasonably infer (e.g. `difficulty`, `total_time`) and always lists them in `ai_filled` so you can see what was guessed versus what you provided, before anything is written to a file.
+
 ## Implementation Plan (initial repo layout)
 
 Build this out in `~/ProjectChef` (already git-initialized, pushed to `github.com/mlip3191/ProjectChef`):
