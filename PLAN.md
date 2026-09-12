@@ -164,7 +164,11 @@ Suggested build order:
 - [x] `save_recipe` in `agent.py` now also ingests into the DB when `db_session`/`owner_id` are configured.
 - [x] `backend/tests/test_ingest.py` + updated `test_agent.py` — 9/9 tests passing (SQLite-backed for speed).
 - [x] Verified end-to-end against a **real Postgres** (temporary Docker container, since Docker Desktop wasn't running - started it, tested, tore the container down after).
-- [ ] Remaining build-order steps 4-7 (FastAPI chat app, Discord bot, Docker Compose + Cloudflare Tunnel, auth) — not started.
+- [x] `backend/app/main.py` — FastAPI app: `/health`, WebSocket `/ws` chat endpoint, static chat UI mounted at `/`. Bootstraps a single default "owner" `UserRecord` since real auth (step 7) doesn't exist yet.
+- [x] `backend/app/static/index.html` — plain HTML/JS chat page (no React/Vite build step for now; swapping to React later only touches this static frontend, not the backend).
+- [x] `backend/tests/test_main.py` — 4 tests (health, websocket round-trip via a stub agent, default-user bootstrap idempotency, static page served). 13/13 tests passing overall.
+- [x] Verified live: booted the real server against a real Postgres container, confirmed `/health`, the chat page, and a raw WebSocket handshake all work. Full agent chat still needs a real `ANTHROPIC_API_KEY` to exercise (not yet tried against the live Anthropic API).
+- [ ] Remaining build-order steps 5-7 (Discord bot, Docker Compose + Cloudflare Tunnel, auth) — not started.
 
 ## Verification
 
