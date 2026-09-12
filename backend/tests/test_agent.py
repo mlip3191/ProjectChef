@@ -1,0 +1,104 @@
+"""Tests for the propose/save turn guard in agent.CookingAgent.
+
+Uses a fake Anthropic client so these run without a real API key or network
+access - they check the *code-enforced* rule that save_recipe can only
+succeed after a later user turn, not just the system-prompt wording.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import pytest
+
+from app.agent import CookingAgent
+
+SAMPLE_RECIPE_INPUT = {
+    "title": "Test Soup",
+    "ingredients": ["1 onion", "2 cups broth"],
+    "steps": ["Chop onion.", "Simmer in broth."],
+    "ai_filled": [],
+}
+
+
+@dataclass
+class FakeBlock:
+    type: str
+    text: str | None = None
+    name: str | None = None
+    input: dict | None = None
+    id: str | None = None
+
+
+@dataclass
+class FakeResponse:
+    content: list[FakeBlock]
+
+
+class FakeMessages:
+    def __init__(self, responses: list[FakeResponse]):
+        self._responses = list(responses)
+
+    def create(self, **kwargs: Any) -> FakeResponse:
+        return self._responses.pop(0)
+
+
+class FakeClient:
+    def __init__(self, responses: list[FakeResponse]):
+        self.messages = FakeMessages(responses)
+
+
+def _tool_use(name: str, input_: dict, tool_id: str = "t1") -> FakeResponse:
+    return FakeResponse([FakeBlock(type="tool_use", name=name, input=input_, id=tool_id)])
+
+
+def _text(message: str) -> FakeResponse:
+    return FakeResponse([FakeBlock(type="text", text=message)])
+
+
+def test_save_in_same_turn_is_rejected(tmp_path):
+    client = FakeClient(
+        [
+            _tool_use("propose_recipe", SAMPLE_RECIPE_INPUT),
+            _tool_use("save_recipe", {}, tool_id="t2"),
+            _text("Something went wrong saving - let me know if you'd like to try again."),
+        ]
+    )
+    agent = CookingAgent(vault_dir=tmp_path, client=client)
+
+    agent.send("Here's my soup recipe...")
+
+    assert agent._pending is not None
+    assert not (tmp_path / "Recipes" / "Test Soup.md").exists()
+
+
+def test_save_after_later_turn_succeeds(tmp_path):
+    client = FakeClient(
+        [
+            _tool_use("propose_recipe", SAMPLE_RECIPE_INPUT),
+            _text("Here's what I've got - does this look right?"),
+            _tool_use("save_recipe", {}, tool_id="t2"),
+            _text("Saved!"),
+        ]
+    )
+    agent = CookingAgent(vault_dir=tmp_path, client=client)
+
+    agent.send("Here's my soup recipe...")
+    reply = agent.send("Looks good, save it.")
+
+    assert reply == "Saved!"
+    assert agent._pending is None
+    assert (tmp_path / "Recipes" / "Test Soup.md").exists()
+
+
+def test_list_and_search_recipes(tmp_path):
+    (tmp_path / "Recipes").mkdir(parents=True)
+    (tmp_path / "Recipes" / "Test Soup.md").write_text("onion broth")
+
+    client = FakeClient([_text("n/a")])
+    agent = CookingAgent(vault_dir=tmp_path, client=client)
+
+    assert agent._list_recipes() == {"recipes": ["Test Soup"]}
+    assert agent._search_recipes("onion") == {"matches": ["Test Soup"]}
+    assert agent._search_recipes("garlic") == {"matches": []}
