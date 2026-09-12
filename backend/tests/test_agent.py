@@ -7,6 +7,7 @@ succeed after a later user turn, not just the system-prompt wording.
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from typing import Any
 
@@ -160,6 +161,54 @@ def test_save_edited_works_without_a_prior_proposal(tmp_path):
 
     assert result["status"] == "saved"
     assert (tmp_path / "Recipes" / "Manual Entry.md").exists()
+
+
+def _init_vault_with_git_remote(tmp_path):
+    """A vault_dir that's a real git repo with a real (local, bare) remote,
+    so commit/push can be tested without touching GitHub.
+    """
+    vault_dir = tmp_path / "vault"
+    vault_dir.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=vault_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=vault_dir, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=vault_dir, check=True)
+
+    bare_remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare_remote)], check=True)
+    subprocess.run(["git", "remote", "add", "origin", str(bare_remote)], cwd=vault_dir, check=True)
+
+    return vault_dir, bare_remote
+
+
+def test_save_edited_commits_and_pushes_to_git(tmp_path):
+    vault_dir, bare_remote = _init_vault_with_git_remote(tmp_path)
+    agent = CookingAgent(vault_dir=vault_dir, client=FakeClient([]))
+
+    edited = recipe_to_markdown(Recipe(title="Git Test", ingredients=["x"], steps=["y"]))
+    result = agent.save_edited(edited)
+
+    assert result["git"] == {"committed": True, "pushed": True}
+
+    log = subprocess.run(
+        ["git", "log", "--oneline"], cwd=vault_dir, capture_output=True, text=True, check=True
+    )
+    assert "Git Test" in log.stdout
+
+    clone_dir = tmp_path / "clone"
+    subprocess.run(["git", "clone", "-q", str(bare_remote), str(clone_dir)], check=True)
+    assert (clone_dir / "Recipes" / "Git Test.md").exists()
+
+
+def test_save_without_git_repo_still_saves(tmp_path):
+    """vault_dir with no .git directory at all - save still succeeds, git is skipped."""
+    agent = CookingAgent(vault_dir=tmp_path, client=FakeClient([]))
+
+    edited = recipe_to_markdown(Recipe(title="No Git", ingredients=["x"], steps=["y"]))
+    result = agent.save_edited(edited)
+
+    assert result["status"] == "saved"
+    assert result["git"]["committed"] is False
+    assert (tmp_path / "Recipes" / "No Git.md").exists()
 
 
 def test_saving_duplicate_title_appends_sequential_number(tmp_path):

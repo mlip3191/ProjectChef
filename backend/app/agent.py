@@ -18,6 +18,7 @@ be saved once at least one further user message has been sent.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import anthropic
@@ -216,12 +217,49 @@ class CookingAgent:
             recipe = recipe.model_copy(update={"title": title})
 
         path.write_text(recipe_to_markdown(recipe))
+        git_result = self._git_commit_and_push(recipe.title, path)
 
         if self.db_session is not None and self.owner_id is not None:
             ingest_file(path, self.db_session, self.owner_id)
             self.db_session.commit()
 
-        return {"status": "saved", "path": str(path), "title": recipe.title}
+        return {"status": "saved", "path": str(path), "title": recipe.title, "git": git_result}
+
+    def _git_commit_and_push(self, title: str, path: Path) -> dict:
+        """Best-effort: commit and push the saved file if vault_dir is a git repo.
+
+        Never raises - a git/network hiccup shouldn't undo an otherwise
+        successful vault write + DB ingest. The vault file itself is the
+        durable copy; git is a backup/sync layer on top of it.
+        """
+        if not (self.vault_dir / ".git").is_dir():
+            return {"committed": False, "pushed": False, "reason": "vault_dir is not a git repo"}
+
+        def run(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                ["git", *args], cwd=self.vault_dir, capture_output=True, text=True
+            )
+
+        try:
+            rel_path = path.relative_to(self.vault_dir)
+            run("add", str(rel_path))
+
+            commit = run("commit", "-m", f"Save recipe: {title}")
+            if commit.returncode != 0:
+                # Most commonly: nothing to commit (re-saved identical content).
+                return {
+                    "committed": False,
+                    "pushed": False,
+                    "reason": (commit.stdout + commit.stderr).strip(),
+                }
+
+            push = run("push", "-u", "origin", "HEAD")
+            if push.returncode != 0:
+                return {"committed": True, "pushed": False, "reason": push.stderr.strip()}
+
+            return {"committed": True, "pushed": True}
+        except OSError as exc:
+            return {"committed": False, "pushed": False, "reason": str(exc)}
 
     def _unique_title_and_path(self, title: str) -> tuple[str, Path]:
         """If <title>.md already exists, append " (2)", " (3)", etc.

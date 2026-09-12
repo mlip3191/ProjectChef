@@ -40,7 +40,12 @@ class StubAgent:
 
     def save_edited(self, markdown_text: str) -> dict:
         self.saved_markdown = markdown_text
-        return {"status": "saved", "path": "/fake/vault/Recipes/Test Soup.md", "title": "Test Soup"}
+        return {
+            "status": "saved",
+            "path": "/fake/vault/Recipes/Test Soup.md",
+            "title": "Test Soup",
+            "git": {"committed": True, "pushed": True},
+        }
 
 
 def test_health_endpoint(tmp_path, monkeypatch):
@@ -90,6 +95,7 @@ def test_websocket_save_edited(tmp_path, monkeypatch):
                 "type": "saved",
                 "path": "/fake/vault/Recipes/Test Soup.md",
                 "title": "Test Soup",
+                "git": {"committed": True, "pushed": True},
             }
             assert stub.saved_markdown == edited
 

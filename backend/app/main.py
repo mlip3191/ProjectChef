@@ -103,7 +103,12 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 try:
                     result = await run_in_threadpool(agent.save_edited, message["markdown"])
                     await websocket.send_json(
-                        {"type": "saved", "path": result["path"], "title": result.get("title")}
+                        {
+                            "type": "saved",
+                            "path": result["path"],
+                            "title": result.get("title"),
+                            "git": result.get("git"),
+                        }
                     )
                 except Exception as exc:  # malformed markdown from manual edits
                     await websocket.send_json({"type": "error", "message": str(exc)})

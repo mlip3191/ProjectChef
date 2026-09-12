@@ -133,7 +133,11 @@
         append('msg-chef', 'chef: ' + msg.text);
         setProposal(msg.proposal_markdown);
       } else if (msg.type === 'saved') {
-        editorStatus.textContent = `Saved as "${msg.title}" -> ${msg.path}`;
+        const git = msg.git || {};
+        const gitNote = git.pushed ? ' (pushed to git)'
+          : git.committed ? ' (committed, push failed)'
+          : '';
+        editorStatus.textContent = `Saved as "${msg.title}"${gitNote}`;
         setProposal(null);
       } else if (msg.type === 'error') {
         editorStatus.textContent = 'Error: ' + msg.message;
