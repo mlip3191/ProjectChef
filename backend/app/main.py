@@ -14,13 +14,13 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from .agent import CookingAgent
-from .db import UserRecord, get_sessionmaker, init_db
+from .db import RecipeRecord, UserRecord, get_sessionmaker, init_db
 
 VAULT_DIR = Path(os.environ.get("VAULT_DIR", "./vault_dev"))
 DEFAULT_USERNAME = "owner"
@@ -51,6 +51,30 @@ def _get_or_create_default_user(session: Session) -> UserRecord:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/recipes")
+def list_recipes() -> list[dict]:
+    session = get_sessionmaker()()
+    try:
+        owner = _get_or_create_default_user(session)
+        records = (
+            session.query(RecipeRecord)
+            .filter_by(owner_id=owner.id)
+            .order_by(RecipeRecord.title)
+            .all()
+        )
+        return [{"title": r.title, "tags": r.tags} for r in records]
+    finally:
+        session.close()
+
+
+@app.get("/api/recipes/{title}")
+def get_recipe_markdown(title: str) -> dict:
+    path = VAULT_DIR / "Recipes" / f"{title}.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"No recipe named {title!r}")
+    return {"title": title, "markdown": path.read_text()}
 
 
 @app.websocket("/ws")

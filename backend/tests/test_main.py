@@ -120,3 +120,39 @@ def test_static_index_served(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert "ProjectChef" in response.text
+
+
+def test_list_recipes_endpoint(tmp_path, monkeypatch):
+    main_module = _fresh_main_module(tmp_path, monkeypatch)
+
+    with TestClient(main_module.app) as client:
+        session = main_module.get_sessionmaker()()
+        owner = main_module._get_or_create_default_user(session)
+        session.add(
+            main_module.RecipeRecord(
+                owner_id=owner.id, title="Chili", tags=["meal/dinner"], ingredients=[], steps=[]
+            )
+        )
+        session.commit()
+        session.close()
+
+        response = client.get("/api/recipes")
+
+        assert response.status_code == 200
+        assert response.json() == [{"title": "Chili", "tags": ["meal/dinner"]}]
+
+
+def test_get_recipe_markdown_endpoint(tmp_path, monkeypatch):
+    main_module = _fresh_main_module(tmp_path, monkeypatch)
+    recipes_dir = tmp_path / "vault" / "Recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "Chili.md").write_text("---\ntitle: Chili\n---\n\n## Steps\n1. Simmer.\n")
+
+    client = TestClient(main_module.app)
+
+    response = client.get("/api/recipes/Chili")
+    assert response.status_code == 200
+    assert "Simmer" in response.json()["markdown"]
+
+    missing = client.get("/api/recipes/Nonexistent")
+    assert missing.status_code == 404

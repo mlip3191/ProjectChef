@@ -35,10 +35,43 @@
   #commit-btn { background: #0a6b3a; color: white; border: none; border-radius: 4px; }
   #commit-btn:disabled { background: #ccc; cursor: not-allowed; }
   #editor-status { font-size: 0.85rem; color: #888; align-self: center; }
+
+  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .header-row h1 { margin: 0; }
+
+  #archive-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    align-items: center; justify-content: center; z-index: 10;
+  }
+  #archive-overlay.open { display: flex; }
+  #archive-modal {
+    background: white; border-radius: 8px; padding: 1.5rem; width: 700px;
+    max-width: 90vw; height: 70vh; display: flex; gap: 1rem;
+  }
+  #archive-list { width: 220px; overflow-y: auto; border-right: 1px solid #ddd; padding-right: 1rem; }
+  #archive-list div { padding: 0.4rem 0.3rem; cursor: pointer; border-radius: 4px; }
+  #archive-list div:hover { background: #f0f0f0; }
+  #archive-preview {
+    flex: 1; overflow-y: auto; font-family: ui-monospace, monospace;
+    font-size: 0.8rem; white-space: pre-wrap; color: #333;
+  }
+  #archive-close { align-self: flex-start; }
 </style>
 </head>
 <body>
-  <h1>ProjectChef</h1>
+  <div class="header-row">
+    <h1>ProjectChef</h1>
+    <button id="archive-btn">Archive</button>
+  </div>
+
+  <div id="archive-overlay">
+    <div id="archive-modal">
+      <div id="archive-list"></div>
+      <div id="archive-preview">Select a recipe to preview it.</div>
+      <button id="archive-close">Close</button>
+    </div>
+  </div>
+
   <div class="layout">
     <div class="panel">
       <h2>Chat</h2>
@@ -119,6 +152,50 @@
     commitBtn.addEventListener('click', () => {
       editorStatus.textContent = 'Saving...';
       ws.send(JSON.stringify({ type: 'save_edited', markdown: editor.value }));
+    });
+
+    const archiveBtn = document.getElementById('archive-btn');
+    const archiveOverlay = document.getElementById('archive-overlay');
+    const archiveClose = document.getElementById('archive-close');
+    const archiveList = document.getElementById('archive-list');
+    const archivePreview = document.getElementById('archive-preview');
+
+    async function loadArchiveList() {
+      archiveList.textContent = 'Loading...';
+      const response = await fetch('/api/recipes');
+      const recipes = await response.json();
+      archiveList.innerHTML = '';
+      if (recipes.length === 0) {
+        archiveList.textContent = 'No recipes saved yet.';
+        return;
+      }
+      for (const recipe of recipes) {
+        const item = document.createElement('div');
+        item.textContent = recipe.title;
+        item.addEventListener('click', () => loadArchivePreview(recipe.title));
+        archiveList.appendChild(item);
+      }
+    }
+
+    async function loadArchivePreview(title) {
+      archivePreview.textContent = 'Loading...';
+      const response = await fetch(`/api/recipes/${encodeURIComponent(title)}`);
+      if (!response.ok) {
+        archivePreview.textContent = 'Could not load that recipe.';
+        return;
+      }
+      const data = await response.json();
+      archivePreview.textContent = data.markdown;
+    }
+
+    archiveBtn.addEventListener('click', () => {
+      archiveOverlay.classList.add('open');
+      archivePreview.textContent = 'Select a recipe to preview it.';
+      loadArchiveList();
+    });
+    archiveClose.addEventListener('click', () => archiveOverlay.classList.remove('open'));
+    archiveOverlay.addEventListener('click', (event) => {
+      if (event.target === archiveOverlay) archiveOverlay.classList.remove('open');
     });
   </script>
 </body>
