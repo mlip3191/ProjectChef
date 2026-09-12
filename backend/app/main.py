@@ -9,6 +9,7 @@ agent/ingest/vault code it wires together.
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -54,15 +55,32 @@ def health() -> dict:
 
 @app.websocket("/ws")
 async def websocket_chat(websocket: WebSocket) -> None:
+    """Protocol: client sends {"type": "chat", "text": ...} or
+    {"type": "save_edited", "markdown": ...}. Server replies with
+    {"type": "reply", "text": ..., "proposal_markdown": str | null} for chat,
+    or {"type": "saved", "path": ...} / {"type": "error", "message": ...} for
+    save_edited.
+    """
     await websocket.accept()
     session = get_sessionmaker()()
     try:
         owner = _get_or_create_default_user(session)
         agent = create_agent(session, owner.id)
         while True:
-            message = await websocket.receive_text()
-            reply = await run_in_threadpool(agent.send, message)
-            await websocket.send_text(reply)
+            raw = await websocket.receive_text()
+            message = json.loads(raw)
+
+            if message["type"] == "chat":
+                reply = await run_in_threadpool(agent.send, message["text"])
+                await websocket.send_json(
+                    {"type": "reply", "text": reply, "proposal_markdown": agent.pending_markdown()}
+                )
+            elif message["type"] == "save_edited":
+                try:
+                    result = await run_in_threadpool(agent.save_edited, message["markdown"])
+                    await websocket.send_json({"type": "saved", "path": result["path"]})
+                except Exception as exc:  # malformed markdown from manual edits
+                    await websocket.send_json({"type": "error", "message": str(exc)})
     except WebSocketDisconnect:
         pass
     finally:

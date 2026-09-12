@@ -27,8 +27,20 @@ def _fresh_main_module(tmp_path, monkeypatch):
 
 
 class StubAgent:
+    def __init__(self):
+        self.saved_markdown = None
+
     def send(self, message: str) -> str:
+        if "soup" in message.lower():
+            self._pending_markdown = "---\ntitle: Test Soup\n---\n\n## Steps\n1. Simmer.\n"
         return f"echo: {message}"
+
+    def pending_markdown(self) -> str | None:
+        return getattr(self, "_pending_markdown", None)
+
+    def save_edited(self, markdown_text: str) -> dict:
+        self.saved_markdown = markdown_text
+        return {"status": "saved", "path": "/fake/vault/Recipes/Test Soup.md"}
 
 
 def test_health_endpoint(tmp_path, monkeypatch):
@@ -47,8 +59,35 @@ def test_websocket_chat_roundtrip(tmp_path, monkeypatch):
 
     with TestClient(main_module.app) as client:
         with client.websocket_connect("/ws") as ws:
-            ws.send_text("hello")
-            assert ws.receive_text() == "echo: hello"
+            ws.send_json({"type": "chat", "text": "hello"})
+            reply = ws.receive_json()
+            assert reply == {"type": "reply", "text": "echo: hello", "proposal_markdown": None}
+
+
+def test_websocket_chat_includes_proposal_markdown(tmp_path, monkeypatch):
+    main_module = _fresh_main_module(tmp_path, monkeypatch)
+    monkeypatch.setattr(main_module, "create_agent", lambda session, owner_id: StubAgent())
+
+    with TestClient(main_module.app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "chat", "text": "here's my soup recipe"})
+            reply = ws.receive_json()
+            assert reply["type"] == "reply"
+            assert "Test Soup" in reply["proposal_markdown"]
+
+
+def test_websocket_save_edited(tmp_path, monkeypatch):
+    main_module = _fresh_main_module(tmp_path, monkeypatch)
+    stub = StubAgent()
+    monkeypatch.setattr(main_module, "create_agent", lambda session, owner_id: stub)
+
+    with TestClient(main_module.app) as client:
+        with client.websocket_connect("/ws") as ws:
+            edited = "---\ntitle: Test Soup\n---\n\n## Steps\n1. Simmer longer.\n"
+            ws.send_json({"type": "save_edited", "markdown": edited})
+            reply = ws.receive_json()
+            assert reply == {"type": "saved", "path": "/fake/vault/Recipes/Test Soup.md"}
+            assert stub.saved_markdown == edited
 
 
 def test_websocket_bootstraps_default_user_once(tmp_path, monkeypatch):
@@ -57,11 +96,11 @@ def test_websocket_bootstraps_default_user_once(tmp_path, monkeypatch):
 
     with TestClient(main_module.app) as client:
         with client.websocket_connect("/ws") as ws:
-            ws.send_text("hi")
-            ws.receive_text()
+            ws.send_json({"type": "chat", "text": "hi"})
+            ws.receive_json()
         with client.websocket_connect("/ws") as ws:
-            ws.send_text("hi again")
-            ws.receive_text()
+            ws.send_json({"type": "chat", "text": "hi again"})
+            ws.receive_json()
 
         session = main_module.get_sessionmaker()()
         users = session.query(main_module.UserRecord).filter_by(username="owner").all()

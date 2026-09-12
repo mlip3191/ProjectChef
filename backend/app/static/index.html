@@ -4,29 +4,69 @@
 <meta charset="utf-8" />
 <title>ProjectChef</title>
 <style>
-  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
-  #log { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; height: 420px;
-         overflow-y: auto; margin-bottom: 1rem; white-space: pre-wrap; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, sans-serif; margin: 0; padding: 1.5rem;
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  h1 { margin: 0 0 1rem 0; font-size: 1.4rem; }
+  .layout { display: flex; gap: 1.5rem; flex: 1; min-height: 0; }
+  .panel { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .panel h2 { font-size: 1rem; margin: 0 0 0.5rem 0; color: #555; }
+
+  #log {
+    border: 1px solid #ccc; border-radius: 8px; padding: 1rem; flex: 1;
+    overflow-y: auto; margin-bottom: 1rem; white-space: pre-wrap;
+  }
   .msg-you { color: #333; margin: 0.5rem 0; }
   .msg-chef { color: #0a6b3a; margin: 0.5rem 0; }
   .msg-system { color: #999; font-style: italic; margin: 0.5rem 0; }
+
   form { display: flex; gap: 0.5rem; }
   input { flex: 1; padding: 0.5rem; font-size: 1rem; }
-  button { padding: 0.5rem 1rem; font-size: 1rem; }
+  button { padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; }
+
+  #editor {
+    flex: 1; font-family: ui-monospace, monospace; font-size: 0.85rem;
+    border: 1px solid #ccc; border-radius: 8px; padding: 1rem; resize: none;
+  }
+  #editor:disabled { color: #999; background: #fafafa; }
+  .editor-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+  #commit-btn { background: #0a6b3a; color: white; border: none; border-radius: 4px; }
+  #commit-btn:disabled { background: #ccc; cursor: not-allowed; }
+  #editor-status { font-size: 0.85rem; color: #888; align-self: center; }
 </style>
 </head>
 <body>
   <h1>ProjectChef</h1>
-  <div id="log"></div>
-  <form id="form">
-    <input id="input" autocomplete="off" placeholder="Tell me about a recipe..." />
-    <button type="submit">Send</button>
-  </form>
+  <div class="layout">
+    <div class="panel">
+      <h2>Chat</h2>
+      <div id="log"></div>
+      <form id="form">
+        <input id="input" autocomplete="off" placeholder="Tell me about a recipe..." />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Current recipe (edit before committing)</h2>
+      <textarea id="editor" disabled placeholder="Proposed recipes will appear here for review..."></textarea>
+      <div class="editor-actions">
+        <button id="commit-btn" disabled>Commit to Archive</button>
+        <span id="editor-status"></span>
+      </div>
+    </div>
+  </div>
 
   <script>
     const log = document.getElementById('log');
     const form = document.getElementById('form');
     const input = document.getElementById('input');
+    const editor = document.getElementById('editor');
+    const commitBtn = document.getElementById('commit-btn');
+    const editorStatus = document.getElementById('editor-status');
+
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
 
@@ -38,17 +78,47 @@
       log.scrollTop = log.scrollHeight;
     }
 
+    function setProposal(markdown) {
+      if (markdown) {
+        editor.value = markdown;
+        editor.disabled = false;
+        commitBtn.disabled = false;
+        editorStatus.textContent = '';
+      } else {
+        editor.value = '';
+        editor.disabled = true;
+        commitBtn.disabled = true;
+      }
+    }
+
     ws.onopen = () => append('msg-system', 'connected');
-    ws.onmessage = (event) => append('msg-chef', 'chef: ' + event.data);
     ws.onclose = () => append('msg-system', 'disconnected');
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'reply') {
+        append('msg-chef', 'chef: ' + msg.text);
+        setProposal(msg.proposal_markdown);
+      } else if (msg.type === 'saved') {
+        editorStatus.textContent = `Saved to ${msg.path}`;
+        setProposal(null);
+      } else if (msg.type === 'error') {
+        editorStatus.textContent = 'Error: ' + msg.message;
+      }
+    };
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       const text = input.value.trim();
       if (!text) return;
       append('msg-you', 'you: ' + text);
-      ws.send(text);
+      ws.send(JSON.stringify({ type: 'chat', text }));
       input.value = '';
+    });
+
+    commitBtn.addEventListener('click', () => {
+      editorStatus.textContent = 'Saving...';
+      ws.send(JSON.stringify({ type: 'save_edited', markdown: editor.value }));
     });
   </script>
 </body>

@@ -17,6 +17,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.agent import CookingAgent
 from app.db import Base, UserRecord, RecipeRecord
+from app.vault import recipe_to_markdown
+from app.models import Recipe
 
 SAMPLE_RECIPE_INPUT = {
     "title": "Test Soup",
@@ -119,6 +121,45 @@ def test_save_ingests_into_db_when_configured(tmp_path):
 
     record = session.query(RecipeRecord).filter_by(owner_id=user.id, title="Test Soup").one()
     assert record.vault_path == str(tmp_path / "Recipes" / "Test Soup.md")
+
+
+def test_pending_markdown_reflects_current_proposal(tmp_path):
+    client = FakeClient(
+        [_tool_use("propose_recipe", SAMPLE_RECIPE_INPUT), _text("Does this look right?")]
+    )
+    agent = CookingAgent(vault_dir=tmp_path, client=client)
+
+    assert agent.pending_markdown() is None
+    agent.send("Here's my soup recipe...")
+    assert "Test Soup" in agent.pending_markdown()
+
+
+def test_save_edited_writes_hand_edited_markdown_and_clears_pending(tmp_path):
+    client = FakeClient(
+        [_tool_use("propose_recipe", SAMPLE_RECIPE_INPUT), _text("Does this look right?")]
+    )
+    agent = CookingAgent(vault_dir=tmp_path, client=client)
+    agent.send("Here's my soup recipe...")
+
+    edited = recipe_to_markdown(Recipe(title="Test Soup", ingredients=["1 onion", "3 cups broth"], steps=["Chop.", "Simmer longer."]))
+    result = agent.save_edited(edited)
+
+    assert result["status"] == "saved"
+    saved_path = tmp_path / "Recipes" / "Test Soup.md"
+    assert saved_path.exists()
+    assert "3 cups broth" in saved_path.read_text()
+    assert agent._pending is None
+
+
+def test_save_edited_works_without_a_prior_proposal(tmp_path):
+    client = FakeClient([])
+    agent = CookingAgent(vault_dir=tmp_path, client=client)
+
+    edited = recipe_to_markdown(Recipe(title="Manual Entry", ingredients=["x"], steps=["y"]))
+    result = agent.save_edited(edited)
+
+    assert result["status"] == "saved"
+    assert (tmp_path / "Recipes" / "Manual Entry.md").exists()
 
 
 def test_list_and_search_recipes(tmp_path):

@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from .ingest import ingest_file
 from .models import Recipe
-from .vault import recipe_to_markdown
+from .vault import markdown_to_recipe, recipe_to_markdown
 
 CHAT_MODEL = "claude-sonnet-5"
 
@@ -168,6 +168,25 @@ class CookingAgent:
             return self._list_recipes()
         return {"status": "error", "message": f"unknown tool {name!r}"}
 
+    def pending_markdown(self) -> str | None:
+        """Markdown preview of the currently proposed (not-yet-saved) recipe, if any."""
+        return recipe_to_markdown(self._pending) if self._pending is not None else None
+
+    def save_edited(self, markdown_text: str) -> dict:
+        """Save recipe markdown the user edited directly in the editor panel.
+
+        This is a separate path from `save_recipe` (the LLM tool): clicking
+        "commit to archive" on hand-edited text *is* the explicit human
+        approval, so there's no same-turn guard to apply here - unlike
+        `_save_recipe`, this isn't Claude trying to save its own proposal.
+        """
+        recipe = markdown_to_recipe(markdown_text)
+        result = self._write_and_ingest(recipe)
+        if recipe is self._pending or (self._pending and recipe.title == self._pending.title):
+            self._pending = None
+            self._pending_turn = -1
+        return result
+
     def _propose_recipe(self, input_: dict) -> dict:
         recipe = Recipe(**input_)
         self._pending = recipe
@@ -186,11 +205,14 @@ class CookingAgent:
                 ),
             }
 
-        recipe = self._pending
-        path = self.vault_dir / "Recipes" / f"{recipe.title}.md"
-        path.write_text(recipe_to_markdown(recipe))
+        result = self._write_and_ingest(self._pending)
         self._pending = None
         self._pending_turn = -1
+        return result
+
+    def _write_and_ingest(self, recipe: Recipe) -> dict:
+        path = self.vault_dir / "Recipes" / f"{recipe.title}.md"
+        path.write_text(recipe_to_markdown(recipe))
 
         if self.db_session is not None and self.owner_id is not None:
             ingest_file(path, self.db_session, self.owner_id)
