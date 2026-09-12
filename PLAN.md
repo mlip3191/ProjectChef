@@ -150,6 +150,17 @@ Suggested build order:
 6. `docker-compose.yml` + Cloudflare Tunnel + `.env` secrets, deploy to the box.
 7. Auth (`auth.py`) — can trail slightly behind since it's single-user initially, but schema for it should already exist per the DB design above.
 
+## Progress
+
+- [x] `backend/app/models.py` — `Recipe` Pydantic model (matches the vault frontmatter schema above).
+- [x] `backend/app/vault.py` — `recipe_to_markdown` / `markdown_to_recipe` round-trip functions.
+- [x] `backend/tests/test_vault.py` — round-trip unit test (2/2 passing).
+- [x] `backend/requirements.txt` (pydantic, python-frontmatter, anthropic).
+- [x] `backend/app/agent.py` — `CookingAgent` with tool-calling (propose_recipe, save_recipe, search_recipes, list_recipes); same-turn save is rejected in code, not just prompt wording.
+- [x] `backend/tests/test_agent.py` — approval-gate tests via a fake Anthropic client (3/3 passing, no API key needed).
+- [x] `backend/scripts/chat_cli.py` — manual CLI to talk to the agent (needs a real `ANTHROPIC_API_KEY` to actually exercise, not yet run against the live API).
+- [ ] Remaining build-order steps 3-7 (ingest.py + Postgres, FastAPI app, Discord bot, Docker Compose, auth) — not started.
+
 ## Verification
 
 - Unit tests (`pytest`) for `vault.py` round-tripping: `Recipe -> markdown -> Recipe` should be lossless, including the `ai_filled` field.
